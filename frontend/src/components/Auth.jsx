@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, User, ArrowRight, Music, Github, Chrome } from 'lucide-react';
 import './Auth.css';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const Auth = ({ onHeaderClick, onAuthSuccess }) => {
   const [isLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -25,7 +27,7 @@ const Auth = ({ onHeaderClick, onAuthSuccess }) => {
     const endpoint = '/api/auth/login';
     
     try {
-      const response = await fetch(`http://127.0.0.1:5000${endpoint}`, {
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -42,7 +44,7 @@ const Auth = ({ onHeaderClick, onAuthSuccess }) => {
     } catch (err) {
       console.error("Auth Error:", err);
       if (err.name === 'TypeError' && err.message.includes('fetch')) {
-        setError('Network error: Cannot reach the backend. Is it running on port 5000?');
+        setError('Network error: Cannot reach the backend. Is it running?');
       } else {
         setError('Connection failed. Check your console for details.');
       }

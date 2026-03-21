@@ -52,38 +52,13 @@ button {
   transition: var(--transition);
 }
 
+/* Global classes */
 .glass {
   background: var(--panel-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-}
-
-.container {
-  max-width: 450px;
-  margin: 0 auto;
-  min-height: 100vh;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-
-.gradient-text {
-  background: linear-gradient(135deg, #fff 0%, #aaa 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-@media (min-width: 768px) {
-  .container {
-    max-width: 1200px;
-    flex-direction: row;
-    gap: 30px;
-    padding: 60px 40px;
-    justify-content: center;
-  }
 }
 
 .discover-wrapper {

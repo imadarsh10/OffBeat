@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import Onboarding from './components/Onboarding';
+import localforage from 'localforage';
 import Discover from './components/Discover';
 import NowPlaying from './components/NowPlaying';
 import Auth from './components/Auth';
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('onboarding'); // onboarding, auth, discover
+  const [currentScreen, setCurrentScreen] = useState('discover'); // auth, discover
   const [selectedSong, setSelectedSong] = useState(null);
   const [playlist, setPlaylist] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
@@ -14,28 +14,36 @@ function App() {
     const saved = localStorage.getItem('likedSongs');
     return saved ? JSON.parse(saved) : [];
   });
+  const [downloadedSongs, setDownloadedSongs] = useState(() => {
+    const saved = localStorage.getItem('downloadedSongs');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [downloadingIds, setDownloadingIds] = useState({});
 
-  // Sync liked songs to localStorage
+  // Sync state to localStorage
   React.useEffect(() => {
     localStorage.setItem('likedSongs', JSON.stringify(likedSongs));
-  }, [likedSongs]);
+    localStorage.setItem('downloadedSongs', JSON.stringify(downloadedSongs));
+  }, [likedSongs, downloadedSongs]);
 
 
-  const handleStart = () => {
-    setCurrentScreen('discover');
-  };
-
-
-  const handleAuthSuccess = () => {
-    setCurrentScreen('discover');
-  };
-
-  const handleLogoClick = () => {
-    setCurrentScreen('onboarding');
-  };
-
-  const handleSongSelect = (song, currentPlaylist = []) => {
-    setSelectedSong(song);
+  const handleSongSelect = async (song, currentPlaylist = []) => {
+    let finalSong = song;
+    if (song.isOffline) {
+      try {
+        const audioBlob = await localforage.getItem(`audio_${song.id}`);
+        if (audioBlob) {
+          finalSong = {
+            ...song,
+            audioSrc: URL.createObjectURL(audioBlob)
+          };
+        }
+      } catch (err) {
+        console.error("Offline playback error", err);
+      }
+    }
+    
+    setSelectedSong(finalSong);
     setPlaylist(currentPlaylist);
     const index = currentPlaylist.findIndex(s => s.id === song.id);
     setCurrentIndex(index);
@@ -49,15 +57,15 @@ function App() {
     } else {
       nextIndex = (currentIndex + 1) % playlist.length;
     }
-    setSelectedSong(playlist[nextIndex]);
-    setCurrentIndex(nextIndex);
+    const nextSong = playlist[nextIndex];
+    handleSongSelect(nextSong, playlist);
   };
 
   const handlePrev = () => {
     if (playlist.length === 0) return;
     const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
-    setSelectedSong(playlist[prevIndex]);
-    setCurrentIndex(prevIndex);
+    const prevSong = playlist[prevIndex];
+    handleSongSelect(prevSong, playlist);
   };
 
   const toggleLike = (song) => {
@@ -71,6 +79,38 @@ function App() {
     });
   };
 
+  const toggleDownload = async (song) => {
+    const isDownloaded = downloadedSongs.some(s => s.id === song.id);
+    
+    if (isDownloaded) {
+      setDownloadedSongs(prev => prev.filter(s => s.id !== song.id));
+      await localforage.removeItem(`audio_${song.id}`);
+    } else {
+      if (downloadingIds[song.id]) return;
+      
+      setDownloadingIds(prev => ({ ...prev, [song.id]: true }));
+      try {
+        const response = await fetch(song.audioSrc);
+        if (!response.ok) throw new Error('Download failed');
+        const audioBlob = await response.blob();
+        
+        await localforage.setItem(`audio_${song.id}`, audioBlob);
+        
+        const offlineSong = {
+          ...song,
+          isOffline: true
+        };
+        
+        setDownloadedSongs(prev => [...prev, offlineSong]);
+      } catch (err) {
+        console.error("Download Error", err);
+        alert("Failed to download song. Please check your connection.");
+      } finally {
+        setDownloadingIds(prev => ({ ...prev, [song.id]: false }));
+      }
+    }
+  };
+
   const handleBackToDiscover = () => {
     setSelectedSong(null);
   };
@@ -80,9 +120,6 @@ function App() {
   return (
     <div className="app-container">
       <AnimatePresence mode="wait">
-        {currentScreen === 'onboarding' && (
-          <Onboarding key="onboarding" onStart={handleStart} />
-        )}
         
         {/* Auth screen bypassed */}
         
@@ -92,6 +129,9 @@ function App() {
               onSongSelect={handleSongSelect} 
               likedSongs={likedSongs}
               toggleLike={toggleLike}
+              downloadedSongs={downloadedSongs}
+              toggleDownload={toggleDownload}
+              downloadingIds={downloadingIds}
             />
           </div>
         )}
@@ -101,7 +141,6 @@ function App() {
       <AnimatePresence>
         {selectedSong && (
           <NowPlaying 
-            key={selectedSong.id} 
             song={selectedSong} 
             onBack={handleBackToDiscover}
             onNext={handleNext}

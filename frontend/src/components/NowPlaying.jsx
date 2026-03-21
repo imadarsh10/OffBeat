@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Share2, Play, Pause, SkipBack, SkipForward, Repeat, Volume2, VolumeX, Volume1, Volume, Heart, Disc, Timer, Moon, Shuffle } from 'lucide-react';
+import { ChevronLeft, Share2, Play, Pause, SkipBack, SkipForward, Repeat, Volume2, VolumeX, Volume1, Volume, Heart, Disc, Shuffle } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 import './NowPlaying.css';
 
@@ -15,11 +16,20 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
   const [lyrics, setLyrics] = useState('');
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [sleepTimer, setSleepTimer] = useState(null); // time in minutes
-  const [sleepTimeRemaining, setSleepTimeRemaining] = useState(null); // seconds
   const [playbackMode, setPlaybackMode] = useState('normal'); // 'normal', 'shuffle', 'loop'
   const [volume, setVolume] = useState(0.8);
-  const [showVolume, setShowVolume] = useState(false);
+  const [prevVolume, setPrevVolume] = useState(0.8);
+  const [showVolume, setShowVolume] = useState(window.innerWidth >= 1024);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setShowVolume(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const audioRef = useRef(null);
 
@@ -29,16 +39,29 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
   // Reset state when song changes
   useEffect(() => {
     setCurrentTime(0);
-    setDuration(0);
+    
+    if (song.duration && typeof song.duration === 'string') {
+      const parts = song.duration.split(':');
+      let parsedSecs = 0;
+      if (parts.length === 2) {
+        parsedSecs = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+      } else if (parts.length === 3) {
+        parsedSecs = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+      }
+      setDuration(parsedSecs > 0 ? parsedSecs : 0);
+    } else {
+      setDuration(0);
+    }
+    
     setIsPlaying(true);
     setLyrics('');
     setShowLyrics(false);
-  }, [song.id]);
+  }, [song.id, song.duration]);
 
   // Fetch lyrics when needed
   useEffect(() => {
     if (showLyrics && !lyrics) {
-      const url = new URL(`http://localhost:5000/api/lyrics/${song.id}`);
+      const url = new URL(`${API_URL}/api/lyrics/${song.id}`);
       url.searchParams.append('title', song.title);
       url.searchParams.append('artist', song.artist);
       
@@ -49,43 +72,6 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
     }
   }, [showLyrics, song.id, lyrics, song.title, song.artist]);
 
-  // Handle Sleep Timer
-  useEffect(() => {
-    let interval;
-    if (sleepTimeRemaining !== null && sleepTimeRemaining > 0 && isPlaying) {
-      interval = setInterval(() => {
-        setSleepTimeRemaining(prev => {
-          if (prev <= 1) {
-            setIsPlaying(false);
-            setSleepTimer(null);
-            return null;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (sleepTimeRemaining === 0) {
-      setIsPlaying(false);
-      setSleepTimeRemaining(null);
-      setSleepTimer(null);
-    }
-    return () => clearInterval(interval);
-  }, [sleepTimeRemaining, isPlaying]);
-
-  const toggleSleepTimer = () => {
-    if (sleepTimer === null) {
-      setSleepTimer(15);
-      setSleepTimeRemaining(15 * 60);
-    } else if (sleepTimer === 15) {
-      setSleepTimer(30);
-      setSleepTimeRemaining(30 * 60);
-    } else if (sleepTimer === 30) {
-      setSleepTimer(60);
-      setSleepTimeRemaining(60 * 60);
-    } else {
-      setSleepTimer(null);
-      setSleepTimeRemaining(null);
-    }
-  };
 
   const parseSyncedLyrics = (lyricsText) => {
     if (!lyricsText) return [];
@@ -125,22 +111,29 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
   }, [currentTime, showLyrics, syncedLyrics]);
 
 
-  // Sync play/pause state
+  // Handle playback control and song changes
   useEffect(() => {
     if (audioRef.current) {
       if (isPlaying) {
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.error("Playback error:", error);
-            setIsPlaying(false);
-          });
-        }
+        // Ensure the source is loaded and then play
+        const playAudio = async () => {
+          try {
+            await audioRef.current.play();
+          } catch (err) {
+            console.warn("Autoplay failed/prevented:", err);
+            // Don't force isPlaying to false if it was just a transient fetch error
+            // but if it's a permission error, we should probably reflect it
+            if (err.name === 'NotAllowedError') {
+              setIsPlaying(false);
+            }
+          }
+        };
+        playAudio();
       } else {
         audioRef.current.pause();
       }
     }
-  }, [isPlaying, song]);
+  }, [isPlaying, song.id]);
 
   // Handle time updates
   const handleTimeUpdate = () => {
@@ -170,15 +163,59 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
   const handleVolumeChange = (e) => {
     const val = parseFloat(e.target.value);
     setVolume(val);
+    if (val > 0) setPrevVolume(val);
     if (audioRef.current) {
       audioRef.current.volume = val;
     }
   };
 
+  const volumeAnimRef = useRef(null);
+
+  const toggleMute = () => {
+    if (volumeAnimRef.current) cancelAnimationFrame(volumeAnimRef.current);
+    
+    let startVol = volume;
+    let targetVol = 0;
+    
+    if (startVol > 0) {
+        setPrevVolume(startVol);
+        targetVol = 0;
+    } else {
+        targetVol = prevVolume > 0 ? prevVolume : 0.8;
+    }
+    
+    const duration = 400; // ms
+    const startTime = performance.now();
+    
+    const easeInOut = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    
+    const animateVol = (currentTime) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = easeInOut(progress);
+        
+        const currentVol = startVol + (targetVol - startVol) * eased;
+        
+        setVolume(currentVol);
+        if (audioRef.current) audioRef.current.volume = currentVol;
+        
+        if (progress < 1) {
+            volumeAnimRef.current = requestAnimationFrame(animateVol);
+        } else {
+            volumeAnimRef.current = null;
+        }
+    };
+    
+    volumeAnimRef.current = requestAnimationFrame(animateVol);
+  };
+
 
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
-      setDuration(audioRef.current.duration);
+      const audioDuration = audioRef.current.duration;
+      if (audioDuration !== Infinity && !isNaN(audioDuration) && audioDuration > 0) {
+        setDuration(audioDuration);
+      }
     }
   };
 
@@ -203,30 +240,17 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
       
       <div className="main-content">
         <header className="header">
-          <motion.button 
-            whileTap={{ scale: 0.9 }}
-            onClick={onBack}
-            className="glass-btn"
-          >
-            <div className="btn-inner">
-              <ChevronLeft size={24} />
-            </div>
-          </motion.button>
-          
-          <motion.button 
-            whileTap={{ scale: 0.9 }}
-            onClick={toggleSleepTimer}
-            className={`glass-btn ${sleepTimer ? 'active' : ''}`}
-          >
-            <div className="btn-inner">
-              {sleepTimeRemaining ? 
-                <span className="timer-text" style={{ fontSize: '0.7rem', fontWeight: '800' }}>{Math.ceil(sleepTimeRemaining / 60)}m</span> : 
-                <Moon size={20} />
-              }
-            </div>
-          </motion.button>
-          
-          <h2>Now Playing</h2>
+            <motion.button 
+              whileTap={{ scale: 0.9 }}
+              onClick={onBack}
+              className="glass-btn"
+            >
+              <div className="btn-inner">
+                <ChevronLeft size={24} />
+              </div>
+            </motion.button>
+            
+            <h2>Now Playing</h2>
           
           <motion.button 
             whileTap={{ scale: 0.9 }}
@@ -364,6 +388,7 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
                 if (audioRef.current) audioRef.current.currentTime = time;
               }}
               className="seek-bar"
+              style={{ '--progress-percent': `${(currentTime / duration) * 100}%` }}
             />
           </div>
         </div>
@@ -372,6 +397,7 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
           <audio 
             ref={audioRef}
             src={song.audioSrc} 
+            autoPlay
             onTimeUpdate={handleTimeUpdate}
             onLoadedMetadata={handleLoadedMetadata}
             onEnded={handleAudioEnded}
@@ -437,13 +463,20 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
                             value={volume} 
                             onChange={handleVolumeChange}
                             className="volume-slider"
+                            style={{ '--volume-percent': `${volume * 100}%` }}
                         />
                     </motion.div>
                 )}
             </AnimatePresence>
-            <button className="ctrl-btn-small" style={{ background: 'none', border: 'none' }}>
+            <motion.button 
+              className="ctrl-btn-small" 
+              style={{ background: 'none', border: 'none' }}
+              onClick={toggleMute}
+              whileTap={{ scale: 0.8 }}
+              transition={{ ease: "easeInOut", duration: 0.2 }}
+            >
                 {volume === 0 ? <VolumeX size={20} /> : volume < 0.5 ? <Volume1 size={20} /> : <Volume2 size={20} />}
-            </button>
+            </motion.button>
           </div>
         </div>
 
