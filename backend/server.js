@@ -5,6 +5,9 @@ const axios = require("axios");
 require("dotenv").config();
 
 const app = express();
+// Render (and many other hosts) run behind a proxy; trust it so req.protocol
+// reflects X-Forwarded-Proto (prevents generating http:// URLs on https sites).
+app.set("trust proxy", 1);
 const PORT = process.env.PORT || 5000;
 const SAAVN_MIRRORS = [
   "https://saavn.me/api",
@@ -116,6 +119,8 @@ app.post("/api/auth/login", (req, res) => {
   const { email } = req.body;
   res.json({ message: "Login successful", user: { fullName: email.split('@')[0], email } });
 });
+
+app.get("/", (req, res) => res.send("OffBeat API is running. Use /api/health"));
 
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
