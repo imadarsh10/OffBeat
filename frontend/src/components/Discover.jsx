@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Play, MoreHorizontal, Home, Library, Disc, Music, User, TrendingUp, Clock, Heart, Download, ChevronLeft, Github, Linkedin, ChevronRight, Youtube, ListMusic, Import, Share2 } from 'lucide-react';
+import { API_URL } from '../config/api';
 
 import './Discover.css';
 
@@ -21,8 +22,6 @@ const SectionHeader = ({ icon: Icon, title, showSeeMore }) => (
   </div>
 );
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-
 const Discover = ({ onSongSelect, likedSongs, toggleLike, downloadedSongs, toggleDownload, downloadingIds = {} }) => {
 
   const [songs, setSongs] = useState([]);
@@ -31,7 +30,7 @@ const Discover = ({ onSongSelect, likedSongs, toggleLike, downloadedSongs, toggl
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [, setError] = useState(null);
   const [searchSource, setSearchSource] = useState('jiosaavn'); // 'jiosaavn' or 'youtube'
   const [activeMenuId, setActiveMenuId] = useState(null); // Track which song's menu is open
   const carouselRef = useRef(null);
@@ -825,7 +824,7 @@ const Discover = ({ onSongSelect, likedSongs, toggleLike, downloadedSongs, toggl
                   <section className="recently-played">
                     <SectionHeader icon={Clock} title="Recently Released" />
                     <div className="recent-list">
-                      {songs.slice(0, 3).map((song, i) => (
+                      {songs.slice(0, 3).map((song) => (
                         <motion.div 
                           key={`recent-${song.id}`}
                           className="recent-card glass"

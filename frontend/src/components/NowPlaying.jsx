@@ -1,8 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Share2, Play, Pause, SkipBack, SkipForward, Repeat, Volume2, VolumeX, Volume1, Volume, Heart, Disc, Shuffle } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { API_URL } from '../config/api';
 
 import './NowPlaying.css';
 
@@ -34,6 +33,35 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
   const audioRef = useRef(null);
 
   const lyricsContainerRef = useRef(null);
+
+  const songSeed = useMemo(() => {
+    const id = String(song.id || 'default');
+    let hash = 0;
+    for (let i = 0; i < id.length; i += 1) {
+      hash = (hash << 5) - hash + id.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  }, [song.id]);
+
+  const seeded = (seed, index, offset) => {
+    const x = Math.sin(seed * 0.001 + (index + 1) * 12.9898 + offset * 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  };
+
+  const waveformBars = useMemo(
+    () =>
+      Array.from({ length: 60 }, (_, i) => ({
+        playingHeights: [
+          seeded(songSeed, i, 1) * 40 + 5,
+          seeded(songSeed, i, 2) * 40 + 5,
+          seeded(songSeed, i, 3) * 40 + 5,
+        ],
+        idleHeight: seeded(songSeed, i, 4) * 20 + 5,
+        animDuration: 0.5 + seeded(songSeed, i, 5),
+      })),
+    [songSeed]
+  );
 
 
   // Reset state when song changes
@@ -351,18 +379,18 @@ const NowPlaying = ({ song, onBack, onNext, onPrev, likedSongs, onToggleLike }) 
 
         <div className="visualizer-section">
           <div className="waveform-container">
-            {[...Array(60)].map((_, i) => (
+          {waveformBars.map((bar, i) => (
                 <motion.div 
                     key={i} 
                     className="wave-bar" 
                     animate={{ 
                         height: isPlaying 
-                            ? [Math.random() * 40 + 5, Math.random() * 40 + 5, Math.random() * 40 + 5] 
-                            : Math.random() * 20 + 5 
+                  ? bar.playingHeights
+                  : bar.idleHeight
                     }}
                     transition={{ 
                         repeat: Infinity, 
-                        duration: 0.5 + Math.random(),
+                duration: bar.animDuration,
                         ease: "easeInOut"
                     }}
                     style={{ 

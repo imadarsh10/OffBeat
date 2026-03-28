@@ -3,10 +3,9 @@ import { AnimatePresence } from 'framer-motion';
 import localforage from 'localforage';
 import Discover from './components/Discover';
 import NowPlaying from './components/NowPlaying';
-import Auth from './components/Auth';
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('discover'); // auth, discover
+  const [currentScreen] = useState('discover'); // auth, discover
   const [selectedSong, setSelectedSong] = useState(null);
   const [playlist, setPlaylist] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(-1);

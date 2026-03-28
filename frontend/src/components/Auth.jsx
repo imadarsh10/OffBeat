@@ -2,11 +2,9 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, User, ArrowRight, Music, Github, Chrome } from 'lucide-react';
 import './Auth.css';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { getApiUrl } from '../config/api';
 
 const Auth = ({ onHeaderClick, onAuthSuccess }) => {
-  const [isLogin] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -27,7 +25,7 @@ const Auth = ({ onHeaderClick, onAuthSuccess }) => {
     const endpoint = '/api/auth/login';
     
     try {
-      const response = await fetch(`${API_URL}${endpoint}`, {
+      const response = await fetch(getApiUrl(endpoint), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
